@@ -1,3 +1,4 @@
+import 'package:call/service/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -20,6 +21,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
   @override
   void initState() {
     super.initState();
+    fetchLeadDetails();
     fetchLeadDetails();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -60,30 +62,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
     );
 
     if (confirm == true) {
-      try {
-        final response = await http.post(
-          Uri.parse('http://52.66.145.64:8080/mandi-dev/lead/call-log'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'leadId': widget.userId, // Replace with actual lead ID
-            'logText': _summaryController.text,
-            'recordingUrl': ''
-          }),
-        );
-
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Call log submitted successfully')),
-          );
-          _summaryController.clear();
-        } else {
-          throw Exception('Failed to submit call log');
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
-      }
+      saveLog();
     }
   }
 
@@ -96,7 +75,10 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
 
       if (response.statusCode == 200) {
         setState(() {
-          leadDetails = json.decode(response.body);
+          final body = utf8.decode(response.bodyBytes);
+          final data = jsonDecode(body);
+
+          leadDetails = data;
           isLoading = false;
         });
       } else {
@@ -139,10 +121,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                       'Lead Information',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    const SizedBox(height: 16),
-                    _buildInfoRow('Name', leadDetails?['name'] ?? ''),
-                    const SizedBox(height: 8),
-                    _buildInfoRow('Number', leadDetails?['number'] ?? ''),
+                    buildLeadAccordion(),
                   ],
                 ),
               ),
@@ -260,13 +239,18 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                 log['logText'] ?? '',
                 style: const TextStyle(fontSize: 16),
               ),
-              if (log['recordingUrl'] != null) ...[
+              if (true) ...[
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
                   onPressed: () {
                     // Implement audio playback functionality
                     // You can use packages like just_audio or audioplayers
                     // to play the recording
+                    // snack bar saying coming soon
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Coming Soon')),
+                    );
+
                   },
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Play Recording'),
@@ -278,4 +262,103 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
       );
     }).toList();
   }
+
+  void saveLog() async {
+    try {
+      // Get headers with user_id
+      final headers = await ApiService.getHeaders();
+
+      final response = await http.post(
+        Uri.parse('http://52.66.145.64:8080/mandi-dev/lead/call-log'),
+        headers: headers,
+        body: jsonEncode({
+          'leadId': widget.userId, // Replace with actual lead ID
+          'logText': _summaryController.text,
+          'recordingUrl': ''
+        }),
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Call log submitted successfully')),
+        );
+        _summaryController.clear();
+
+        fetchLeadDetails();
+      } else {
+        throw Exception('Failed to submit call log');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+    }
+  }
+
+  Widget buildLeadAccordion() {
+  if (isLoading) {
+    return const Center(child: CircularProgressIndicator());
+  }
+
+  if (error != null) {
+    return Center(child: Text(error!));
+  }
+
+  return Card(
+    margin: const EdgeInsets.all(8.0),
+    child: ExpansionTile(
+      title: Text(
+        leadDetails?['name'] ?? 'Name not available',
+        style: const TextStyle(
+          fontSize: 16.0,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInfoRow2('Phone Number', leadDetails?['number']?.toString() ?? 'N/A'),
+              const SizedBox(height: 8),
+              _buildInfoRow2('Sector', leadDetails?['sector']?.toString() ?? 'N/A'),
+              const SizedBox(height: 8),
+              _buildInfoRow2('Anganwadi', leadDetails?['anganwadi']?.toString() ?? 'N/A'),
+              const SizedBox(height: 8),
+              _buildInfoRow2('Father\'s Name', leadDetails?['fatherName']?.toString() ?? 'N/A'),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildInfoRow2(String label, String value) {
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 120,
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.grey,
+          ),
+        ),
+      ),
+      Expanded(
+        child: Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 }
