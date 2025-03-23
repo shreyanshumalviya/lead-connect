@@ -1,3 +1,4 @@
+import 'package:call/core/config.dart';
 import 'package:call/screen/UserDetailPage.dart';
 import 'package:direct_call_plus/direct_call_plus.dart';
 import 'dart:convert';
@@ -28,7 +29,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void fetchUsers() async {
-    const url = "http://52.66.145.64:8080/mandi-dev/lead/getAll";
+    var url = "${ApiConstants.baseUrl}/lead/getAll";
     final uri = Uri.parse(url);
     final response = await http.post(uri);
 
@@ -144,7 +145,7 @@ class _MyHomePageState extends State<MyHomePage> {
         // Make the API call
         final dio = Dio();
         final response = await dio.post(
-          'http://52.66.145.64:8080/mandi-dev/lead/upload',
+          '${ApiConstants.baseUrl}/lead/upload',
           data: formData,
         );
 

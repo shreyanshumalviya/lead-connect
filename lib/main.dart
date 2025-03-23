@@ -3,6 +3,7 @@ import 'package:call/screen/home.dart';
 import 'package:call/screen/login_screen.dart';
 import 'package:call/screen/splash_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:call/core/config.dart';
 // import 'package:phone_state_background/phone_state_background.dart';
 
 void main() async {
@@ -20,7 +21,7 @@ void main() async {
     print('Failed to initialize phone state background: $e');
     // Handle initialization failure appropriately
   }
-
+  await ApiConstants.initialize();
   runApp(const MyApp());
 }
 

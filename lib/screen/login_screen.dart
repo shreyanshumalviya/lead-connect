@@ -1,3 +1,4 @@
+import 'package:call/core/config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -22,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://52.66.145.64:8080/mandi-dev/api/login'),
+        Uri.parse('${ApiConstants.baseUrl}/api/login'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'mobileNumber': _phoneController.text,

@@ -20,7 +20,7 @@ class _SplashScreenState extends State<SplashScreen> {
     final phoneNumber = prefs.getString('phoneNumber');
 
     // Add a small delay to show splash screen
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 1));
 
     if (phoneNumber != null) {
       // Navigate to home screen

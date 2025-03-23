@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+import '../core/config.dart';
+
 class UserDetailsPage extends StatefulWidget {
   final int userId;
 
@@ -70,7 +72,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
     try {
       final response = await http.get(
         Uri.parse(
-            'http://52.66.145.64:8080/mandi-dev/lead/${widget.userId}/details'),
+            '${ApiConstants.baseUrl}/lead/${widget.userId}/details'),
       );
 
       if (response.statusCode == 200) {
@@ -269,7 +271,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
       final headers = await ApiService.getHeaders();
 
       final response = await http.post(
-        Uri.parse('http://52.66.145.64:8080/mandi-dev/lead/call-log'),
+        Uri.parse('${ApiConstants.baseUrl}/lead/call-log'),
         headers: headers,
         body: jsonEncode({
           'leadId': widget.userId, // Replace with actual lead ID
