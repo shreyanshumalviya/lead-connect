@@ -1,3 +1,4 @@
+import 'package:call/components/filter_menu.dart';
 import 'package:call/core/config.dart';
 import 'package:call/screen/UserDetailPage.dart';
 import 'package:direct_call_plus/direct_call_plus.dart';
@@ -21,28 +22,86 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  Timer? _debounce;
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+
+  List<String> sectors = [];
+  List<String> aanganwadis = [];
   List<Map<String, dynamic>> users = [];
+  bool noData = false;
+  bool isLoading = false;
+  int currentPage = 0;
+  final int pageSize = 15;
+  bool hasMore = true;
+  ScrollController _scrollController = ScrollController();
+
   StreamSubscription? _phoneStateSubscription;
 
   void _callNumber(String number) async {
     bool? res = await DirectCallPlus.makeCall(number);
   }
 
-  void fetchUsers() async {
-    var url = "${ApiConstants.baseUrl}/lead/getAll";
-    final uri = Uri.parse(url);
-    final response = await http.post(uri);
+  void fetchUsers({
+    List<String>? sectors,
+    List<String>? aanganwadis,
+    String? searchQuery,
+  }) async {
+    if (isLoading) return;
 
-    if (response.statusCode == 200) {
-      final body = utf8.decode(response.bodyBytes);
-      final data = jsonDecode(body);
+    setState(() {
+      isLoading = true;
+    });
 
-      // Update the users list with data from the responseBody
+    try {
+      var url = "${ApiConstants.baseUrl}/lead/getAll";
+      final uri = Uri.parse(url);
+
+      // Create request body
+      final requestBody = {
+        "pageNumber": currentPage,
+        "pageSize": pageSize,
+        "sortBy": "id",
+        "sortDirection": "ASC",
+        if (sectors != null && sectors.isNotEmpty) "sectors": sectors,
+        if (aanganwadis != null && aanganwadis.isNotEmpty)
+          "aanganwadis": aanganwadis,
+        if (searchQuery != null && searchQuery.isNotEmpty)
+          "searchQuery": searchQuery,
+      };
+
+      final response = await http.post(
+        uri,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(requestBody),
+      );
+
+      if (response.statusCode == 200) {
+        final body = utf8.decode(response.bodyBytes);
+        final data = jsonDecode(body);
+
+        final responseBody = data["responseBody"];
+        final content = responseBody["content"] as List;
+        final isLast = responseBody["last"] as bool;
+
+        setState(() {
+          users.addAll(List<Map<String, dynamic>>.from(content));
+          currentPage++;
+          hasMore = !isLast;
+          isLoading = false;
+        });
+      } else {
+        setState(() {
+          isLoading = false;
+        });
+        debugPrint(
+            'Failed to fetch users. Status code: ${response.statusCode}');
+      }
+    } catch (e) {
       setState(() {
-        users = List<Map<String, dynamic>>.from(data["responseBody"]);
+        isLoading = false;
       });
-    } else {
-      debugPrint('Failed to fetch users. Status code: ${response.statusCode}');
+      debugPrint('Error fetching users: $e');
     }
   }
 
@@ -52,13 +111,40 @@ class _MyHomePageState extends State<MyHomePage> {
     _requestPermissions();
     fetchUsers();
     fetchUsers();
+    _scrollController.addListener(_scrollListener);
     _initPhoneStateListener();
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
     _phoneStateSubscription?.cancel();
     super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      setState(() {
+        _isSearching = query.isNotEmpty;
+        currentPage = 0;
+        users.clear();
+      });
+      fetchUsers(
+          sectors: sectors, aanganwadis: aanganwadis, searchQuery: query);
+    });
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels ==
+        _scrollController.position.maxScrollExtent) {
+      if (!isLoading && hasMore) {
+        fetchUsers();
+      }
+    }
   }
 
   Future<void> _requestPermissions() async {
@@ -197,20 +283,76 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-          title: Text(widget.title),
+          title: _isSearching ? _buildSearchField() : Text(widget.title),
+          actions: [
+            // Search toggle button
+            IconButton(
+              icon: Icon(_isSearching ? Icons.close : Icons.search),
+              onPressed: () {
+                setState(() {
+                  _isSearching = !_isSearching;
+                  if (!_isSearching) {
+                    _searchController.clear();
+                    // Reset search - fetch all data
+                    fetchUsers(
+                        aanganwadis: aanganwadis,
+                        sectors: sectors,
+                        searchQuery: '');
+                  }
+                });
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.filter_list),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (BuildContext context) {
+                    return FilterMenu(
+                      selectedSectors: sectors,
+                      selectedAanganwadis: aanganwadis,
+                      onApplyFilters: (sectors, aanganwadis) {
+                        // Reset pagination
+                        setState(() {
+                          users.clear();
+                          currentPage = 0;
+                          hasMore = true;
+                        });
+
+                        // Apply filters and fetch data
+                        this.sectors = sectors;
+                        this.aanganwadis = aanganwadis;
+                        fetchUsers(sectors: sectors, aanganwadis: aanganwadis);
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ],
         ),
         body: Center(
           child: users.isEmpty
-              ? CircularProgressIndicator() // Show loading if users list is empty
+              ? const Text("No Data Found")
               : ListView.builder(
-                  itemCount: users.length,
+                  controller: _scrollController,
+                  itemCount: users.length + (hasMore ? 1 : 0),
                   itemBuilder: (context, index) {
+                    if (index == users.length) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
                     final name = users[index]["name"]; // Get the user data
                     final no = users[index]["number"]; // Get the number
                     final sector = users[index]["sector"]; // Get the number
                     final aanganwadi =
                         users[index]["aanganwadi"]; // Get the number
                     final id = users[index]["id"];
+                    final daysSinceLastCall = users[index]["daysSinceLastCall"];
                     return Padding(
                         padding: const EdgeInsets.symmetric(
                             vertical: 8.0, horizontal: 16.0),
@@ -233,35 +375,42 @@ class _MyHomePageState extends State<MyHomePage> {
                                 BoxShadow(
                                   color: Colors.grey.withOpacity(0.1),
                                   blurRadius: 5,
-                                  offset: Offset(0, 2),
+                                  offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
                             child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 12.0, horizontal: 16.0),
-                              title: Text(
-                                name, // Concatenate name and number
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    vertical: 12.0, horizontal: 16.0),
+                                title: Text(
+                                  name, // Concatenate name and number
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
                                 ),
-                              ),
-                              subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text("$aanganwadi ($sector)"),
-                                    Text(no)
-                                  ]),
-                              trailing: IconButton(
-                                icon: Icon(Icons.call, color: Colors.blue),
-                                onPressed: () => _callNumber(no),
-                                // Pass the correct number
-                                tooltip: 'Call User',
-                              ),
-                            ),
+                                subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text("$aanganwadi ($sector)"),
+                                      Text(no)
+                                    ]),
+                                trailing: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(
+                                          child: IconButton(
+                                        icon: const Icon(Icons.call,
+                                            color: Colors.blue),
+                                        onPressed: () => _callNumber(no),
+                                        // Pass the correct number
+                                        tooltip: 'Call User',
+                                      )),
+                                      buildCallInfo(daysSinceLastCall)
+                                    ])),
                           ),
                         ));
                   },
@@ -271,8 +420,12 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             FloatingActionButton(
-              onPressed: fetchUsers,
-              tooltip: 'Fetch Users',
+              onPressed: () {
+                setState(() {
+                  users = [];
+                });
+                fetchUsers();
+              },
               child: const Icon(Icons.refresh),
             ),
             const SizedBox(width: 10),
@@ -283,5 +436,43 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ],
         ));
+  }
+
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      autofocus: true,
+      decoration: const InputDecoration(
+        hintText: 'Search...',
+        hintStyle: TextStyle(color: Colors.white70),
+        border: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        enabledBorder: InputBorder.none,
+      ),
+      style: const TextStyle(color: Colors.white),
+      onChanged: _onSearchChanged,
+    );
+  }
+
+  Widget buildCallInfo(int? daysSinceLastCall) {
+    String callText;
+    if (daysSinceLastCall == null || daysSinceLastCall < 0) {
+      callText = 'No calls yet';
+    } else if (daysSinceLastCall == 0) {
+      callText = 'Called today';
+    } else if (daysSinceLastCall == 1) {
+      callText = 'Called yesterday';
+    } else {
+      callText = 'Called $daysSinceLastCall days ago';
+    }
+
+    return Text(
+      callText,
+      style: TextStyle(
+        fontSize: 12,
+        color: Colors.grey[600],
+      ),
+      textAlign: TextAlign.center,
+    );
   }
 }
