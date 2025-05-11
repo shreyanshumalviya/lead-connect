@@ -2,6 +2,7 @@ import 'package:call/service/api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:call_log/call_log.dart';
 
 import '../core/config.dart';
 
@@ -24,11 +25,12 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
   void initState() {
     super.initState();
     fetchLeadDetails();
-    fetchLeadDetails();
+   
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
     });
-
   }
 
   final TextEditingController _summaryController = TextEditingController();
@@ -68,11 +70,29 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
     }
   }
 
+  Future<void> fetchCallLogs() async {
+    Iterable<CallLogEntry> callLogs = await CallLog.get();
+    setState(() {
+      callLogs = callLogs.toList();
+      print(callLogs);
+      print('Call logs fetched successfully ${leadDetails?['number']}');
+      var phone = leadDetails?['number'];
+      var filteredLogs = callLogs.where((log) {
+        print(
+            'Filtered logs: ${log.number} ${log.callType} ${log.duration} ${log.timestamp} ${log.name}');
+        return log.number?.substring(3) == phone;
+      }).toList();
+    });
+  }
+
+  void toggleSelection(String number) {
+    setState(() {});
+  }
+
   Future<void> fetchLeadDetails() async {
     try {
       final response = await http.get(
-        Uri.parse(
-            '${ApiConstants.baseUrl}/lead/${widget.userId}/details'),
+        Uri.parse('${ApiConstants.baseUrl}/lead/${widget.userId}/details'),
       );
 
       if (response.statusCode == 200) {
@@ -81,6 +101,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
           final data = jsonDecode(body);
 
           leadDetails = data;
+          fetchCallLogs();
           isLoading = false;
         });
       } else {
@@ -107,74 +128,77 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
         body: isLoading
             ? const Center(child: CircularProgressIndicator())
             : error != null
-            ? Center(child: Text(error!))
-            : Column(
-          children: [
-            // Fixed header section
-            Card(
-              elevation: 4,
-              margin: const EdgeInsets.all(16.0),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Lead Information',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    buildLeadAccordion(),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text(
-                'Call History',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Scrollable content
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _scrollController, // Add this controller
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Column(
+                ? Center(child: Text(error!))
+                : Column(
                     children: [
-                      ..._buildCallLogs(),
-                      // Call summary section
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 16.0),
-                        child: Column(
-                          children: [
-                            TextField(
-                              controller: _summaryController,
-                              decoration: const InputDecoration(
-                                labelText: 'Call Summary',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter call summary here...',
+                      // Fixed header section
+                      Card(
+                        elevation: 4,
+                        margin: const EdgeInsets.all(16.0),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Lead Information',
+                                style: Theme.of(context).textTheme.titleLarge,
                               ),
-                              maxLines: 3,
+                              buildLeadAccordion(),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Text(
+                          'Call History',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Scrollable content
+                      Expanded(
+                        child: SingleChildScrollView(
+                          controller: _scrollController, // Add this controller
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Column(
+                              children: [
+                                ..._buildCallLogs(),
+                                // Call summary section
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 16.0),
+                                  child: Column(
+                                    children: [
+                                      TextField(
+                                        controller: _summaryController,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Call Summary',
+                                          border: OutlineInputBorder(),
+                                          hintText:
+                                              'Enter call summary here...',
+                                        ),
+                                        maxLines: 3,
+                                      ),
+                                      const SizedBox(height: 16),
+                                      ElevatedButton(
+                                        onPressed: _submitCallLog,
+                                        child:
+                                            const Text('Submit Call Summary'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: _submitCallLog,
-                              child: const Text('Submit Call Summary'),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ));
-
+                  ));
   }
 
   Widget _buildInfoRow(String label, String value) {
@@ -252,7 +276,6 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Coming Soon')),
                     );
-
                   },
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Play Recording'),
@@ -298,69 +321,72 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
   }
 
   Widget buildLeadAccordion() {
-  if (isLoading) {
-    return const Center(child: CircularProgressIndicator());
-  }
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-  if (error != null) {
-    return Center(child: Text(error!));
-  }
+    if (error != null) {
+      return Center(child: Text(error!));
+    }
 
-  return Card(
-    margin: const EdgeInsets.all(8.0),
-    child: ExpansionTile(
-      title: Text(
-        leadDetails?['name'] ?? 'Name not available',
-        style: const TextStyle(
-          fontSize: 16.0,
-          fontWeight: FontWeight.bold,
+    return Card(
+      margin: const EdgeInsets.all(8.0),
+      child: ExpansionTile(
+        title: Text(
+          leadDetails?['name'] ?? 'Name not available',
+          style: const TextStyle(
+            fontSize: 16.0,
+            fontWeight: FontWeight.bold,
+          ),
         ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildInfoRow2('Phone Number',
+                    leadDetails?['number']?.toString() ?? 'N/A'),
+                const SizedBox(height: 8),
+                _buildInfoRow2(
+                    'Sector', leadDetails?['sector']?.toString() ?? 'N/A'),
+                const SizedBox(height: 8),
+                _buildInfoRow2('Anganwadi',
+                    leadDetails?['anganwadi']?.toString() ?? 'N/A'),
+                const SizedBox(height: 8),
+                _buildInfoRow2('Father\'s Name',
+                    leadDetails?['fatherName']?.toString() ?? 'N/A'),
+              ],
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildInfoRow2(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildInfoRow2('Phone Number', leadDetails?['number']?.toString() ?? 'N/A'),
-              const SizedBox(height: 8),
-              _buildInfoRow2('Sector', leadDetails?['sector']?.toString() ?? 'N/A'),
-              const SizedBox(height: 8),
-              _buildInfoRow2('Anganwadi', leadDetails?['anganwadi']?.toString() ?? 'N/A'),
-              const SizedBox(height: 8),
-              _buildInfoRow2('Father\'s Name', leadDetails?['fatherName']?.toString() ?? 'N/A'),
-            ],
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 16,
+            ),
           ),
         ),
       ],
-    ),
-  );
-}
-
-Widget _buildInfoRow2(String label, String value) {
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(
-        width: 120,
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.grey,
-          ),
-        ),
-      ),
-      Expanded(
-        child: Text(
-          value,
-          style: const TextStyle(
-            fontSize: 16,
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
+    );
+  }
 }

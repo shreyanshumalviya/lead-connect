@@ -420,6 +420,7 @@ class _MyHomePageState extends State<MyHomePage> {
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             FloatingActionButton(
+              heroTag: 'refresh_button',
               onPressed: () {
                 setState(() {
                   users = [];
@@ -430,6 +431,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
             const SizedBox(width: 10),
             FloatingActionButton(
+              heroTag: 'upload_button',
               onPressed: _pickAndUploadFile,
               tooltip: 'Upload Excel',
               child: const Icon(Icons.upload_file),

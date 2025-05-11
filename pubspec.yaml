@@ -45,6 +45,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_dotenv: ^5.1.0
   dropdown_search: ^5.0.6
+  call_log: ^5.1.0
 
 
 

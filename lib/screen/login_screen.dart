@@ -44,6 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
+      print('Error: ${e.toString()}');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Network error. Please try again.')),
       );
